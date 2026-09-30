@@ -12,6 +12,7 @@ static Config config;
 static Printer printer;
 static Backend backend;
 static WiFiMulti wifi;
+static uint8_t wifiReason = 0;  // last disconnect reason, 0 = none yet
 
 // Final job result not yet accepted by the backend. No new job is fetched until it is delivered.
 struct Result {
@@ -40,10 +41,45 @@ static void handle(const Job &job) {
   pending = Result{job.id, printer.print(job.data.get(), job.len)};
 }
 
+// Wi-Fi diagnostics for the test label: why there is no connection, known networks and a fresh scan.
+static std::vector<String> wifiDebug(const char *configError) {
+  std::vector<String> lines = {"WiFi: not connected"};
+  if (configError) lines.push_back("Config: " + String(configError));
+  else if (wifiReason) lines.push_back("Reason: " + String(WiFi.disconnectReasonName(wifi_err_reason_t(wifiReason))));
+  else lines.push_back("Reason: no known network in scan, or timeout");
+  String known = "Known:";
+  for (const auto &w : config.wifi) known += " '" + w.ssid + "'";
+  lines.push_back(known);
+  lines.push_back("MAC: " + WiFi.macAddress());
+  int n = std::max<int16_t>(WiFi.scanNetworks(), 0);
+  lines.push_back("Scan: " + String(n) + " networks, * = known");
+  std::vector<int> order(n);
+  for (int i = 0; i < n; i++) order[i] = i;
+  std::sort(order.begin(), order.end(), [](int a, int b) { return WiFi.RSSI(a) > WiFi.RSSI(b); });
+  for (int i : order) {
+    String ssid = WiFi.SSID(i);
+    bool isKnown = std::any_of(config.wifi.begin(), config.wifi.end(), [&](const Config::Wifi &w) { return w.ssid == ssid; });
+    lines.push_back(String(WiFi.RSSI(i)) + " dBm ch" + WiFi.channel(i) + " " + (ssid.isEmpty() ? "(hidden)" : ssid) + (isKnown ? " *" : ""));
+  }
+  WiFi.scanDelete();
+  return lines;
+}
+
 // Temporary: prints a framed label with the Wi-Fi state and a stripe pattern if the printer shows up at boot.
-static void testPrint() {
+static void testPrint(const char *configError) {
   constexpr uint32_t WAIT_MS = 5000;
   constexpr int FRAME = 3, MARGIN = 10, STRIPES = 60;  // dots (180 dpi)
+  // Text first: the Wi-Fi scan in wifiDebug() can knock the printer off USB, so nothing may run between status and print.
+  const String title = "FUNDUS \x80" "A TOURNE";  // \x80: CP437 capital C cedilla
+  const bool online = WiFi.status() == WL_CONNECTED;
+  std::vector<String> body;
+  if (online) {
+    body = {"WiFi: " + WiFi.SSID(), "Signal: " + String(WiFi.RSSI()) + " dBm, ch " + WiFi.channel(),
+            "IP: " + WiFi.localIP().toString()};
+  } else {
+    body = wifiDebug(configError);
+    for (const auto &b : body) Serial.println(b);
+  }
   Printer::Status st;
   for (uint32_t start = millis(); !(st = printer.status()).connected && millis() - start < WAIT_MS;) delay(100);
   // Printable pins of the 128-pin head per tape width (Brother raster command reference).
@@ -61,29 +97,26 @@ static void testPrint() {
     return;
   }
 
-  std::vector<String> text = {"FUNDUS \x80" "A TOURNE"};  // \x80: CP437 capital C cedilla
-  if (WiFi.status() == WL_CONNECTED) {
-    text.push_back("WiFi: " + WiFi.SSID());
-    text.push_back("Signal: " + String(WiFi.RSSI()) + " dBm, ch " + WiFi.channel());
-    text.push_back("IP: " + WiFi.localIP().toString());
-  } else {
-    text.push_back("WiFi: not connected");
-  }
-  size_t chars = 0;
-  for (const auto &t : text) chars = std::max(chars, t.length());
-  // Built-in 5x7 font in 6x8 cells, scaled to fill the tape width.
-  const int scale = std::clamp((dots - 2 * FRAME - 4) / int(8 * text.size()), 1, 3);
-  const int lineH = 8 * scale, top = (dots - lineH * int(text.size())) / 2;
-  const int len = FRAME + MARGIN + 6 * scale * int(chars) + MARGIN + STRIPES + FRAME;
+  // Built-in 5x7 font in 6x8 cells, scaled to fill the tape width. Debug lines stay small; cut off what does not fit.
+  const int avail = dots - 2 * FRAME - 4;
+  const int bodyScale = online ? std::clamp(avail / int(8 * (body.size() + 1)), 1, 3) : 1;
+  if (!online) body.resize(std::clamp((avail - 16) / 8, 1, int(body.size())));
+  const int titleScale = online ? bodyScale : std::clamp((avail - 8 * int(body.size())) / 8, 1, 2);
+  int textLen = 6 * titleScale * title.length();
+  for (const auto &b : body) textLen = std::max(textLen, 6 * bodyScale * int(b.length()));
+  const int len = FRAME + MARGIN + textLen + MARGIN + STRIPES + FRAME;
 
   // Canvas x runs along the tape (one raster line per column), y across it.
   GFXcanvas1 canvas(len, dots);
   canvas.cp437(true);
   canvas.setTextWrap(false);
-  canvas.setTextSize(scale);
-  for (size_t i = 0; i < text.size(); i++) {
-    canvas.setCursor(FRAME + MARGIN, top + lineH * i);
-    canvas.print(text[i]);
+  canvas.setCursor(FRAME + MARGIN, std::max(0, (dots - 8 * titleScale - 8 * bodyScale * int(body.size())) / 2));
+  canvas.setTextSize(titleScale);
+  canvas.println(title);
+  canvas.setTextSize(bodyScale);
+  for (const auto &b : body) {
+    canvas.setCursor(FRAME + MARGIN, canvas.getCursorY());
+    canvas.println(b);
   }
   for (int x = len - FRAME - STRIPES; x < len; x++)
     for (int y = 0; y < dots; y++)
@@ -139,13 +172,15 @@ void setup() {
   Serial.begin(115200);
   xTaskCreate(ledTask, "led", 4096, nullptr, 1, nullptr);
   printer.begin();
-  bool configured = LittleFS.begin() && config.load(LittleFS);
+  const char *configError = LittleFS.begin() ? config.load(LittleFS) : "LittleFS mount failed";
+  WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) { wifiReason = info.wifi_sta_disconnected.reason; },
+               ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   WiFi.mode(WIFI_STA);
   for (const auto &w : config.wifi) wifi.addAP(w.ssid.c_str(), w.password.c_str());
-  if (configured) wifi.run();  // first connection attempt, so the test print can show it
-  testPrint();
-  if (!configured) {
-    Serial.println("No valid /config.json: upload it with `pio run -t uploadfs`");
+  if (!configError) wifi.run();  // first connection attempt, so the test print can show it
+  testPrint(configError);
+  if (configError) {
+    Serial.printf("Config: %s. Upload /config.json with `pio run -t uploadfs`\n", configError);
     for (;;) delay(1000);
   }
   backend.begin(config);

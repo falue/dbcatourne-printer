@@ -1,9 +1,10 @@
 #pragma once
 #include <Arduino.h>
 #include <usb/usb_host.h>
+#include <atomic>
 
 // Brother PT-P700 on the ESP32-S3 USB OTG port (host mode).
-// Not thread-safe: all calls must come from the same task.
+// Not thread-safe: all calls must come from the same task. USB events are handled by an internal task.
 class Printer {
 public:
   struct Status {
@@ -14,7 +15,7 @@ public:
   };
 
   void begin();
-  // Handles plug/unplug events. Cheap; call often.
+  // Opens/closes the printer after plug/unplug events. Cheap; call often.
   void poll();
   // Queries the printer (ESC i S). Prints nothing.
   Status status();
@@ -32,13 +33,13 @@ private:
   int iface = -1;  // claimed printer interface, -1 if the device is not a usable PT-P700
   uint8_t epIn = 0, epOut = 0;
   usb_transfer_t *xferIn = nullptr, *xferOut = nullptr;
-  uint8_t newAddr = 0;  // set by the client callback, handled in poll()
-  bool gone = false;
-  bool done = false;  // current transfer finished
+  std::atomic<uint8_t> newAddr = 0;  // set by the client callback, handled in poll()
+  std::atomic<bool> gone = false;
+  SemaphoreHandle_t done = nullptr;  // given when the current transfer finished
+  uint32_t lastTape = UINT32_MAX;  // width, type and colors from the last status, to log changes
 
   static void onClientEvent(const usb_host_client_event_msg_t *msg, void *arg);
   static void onTransferDone(usb_transfer_t *t);
-  void pump(uint32_t ms);
   void open(uint8_t addr);
   void close();
   bool transfer(usb_transfer_t *t, uint32_t timeoutMs);

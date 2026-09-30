@@ -1,0 +1,9 @@
+{
+  "wifi": [
+    { "ssid": "warehouse", "password": "secret" },
+    { "ssid": "office", "password": "secret" }
+  ],
+  "server": "https://catourne.ch",
+  "printerId": "P700-01",
+  "token": "device-token-from-backend"
+}

@@ -51,3 +51,6 @@ functions/.emulator-site
 
 # PlatformIO
 .pio
+
+# Mock backend job queue
+tools/jobs/

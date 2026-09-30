@@ -2,7 +2,7 @@
 #include <FS.h>
 #include <vector>
 
-// Device settings and credentials, read from a JSON file (see config.json).
+// Device settings and credentials, read from a JSON file (see config.example.json).
 struct Config {
   struct Wifi {
     String ssid, password;
@@ -10,6 +10,6 @@ struct Config {
   std::vector<Wifi> wifi;  // the strongest one in range is used
   String server, printerId, token;
 
-  // Returns false (and logs why) when the file is missing, invalid or incomplete.
-  bool load(fs::FS &fs, const char *path = "/config.json");
+  // Returns nullptr, or why the file is missing, invalid or incomplete.
+  const char *load(fs::FS &fs, const char *path = "/config.json");
 };
