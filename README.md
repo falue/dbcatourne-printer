@@ -51,10 +51,28 @@ Press Enter to queue a test label, or drop a `.bin` PT-P700 command stream into 
 ## Wiring
 
 ```text
-12 V battery ──┬──────────────────────► PT-P700 DC in (12 V)
-               └─► buck 12 V → 5 V ───► DevKit 5V pin
-GND ─────────── common ground: battery, buck, DevKit GND
-DevKit USB (OTG) port ──USB cable──► PT-P700 USB
+ AC-DC 230v to 12V
+        │ barrell jack
+        ▼
+
+Barrel jack in case
+        │ wires to usb c
+        ▼
+    POWER BANK
+  INIU P41 USB-C
+        │ usb-c to usb-c
+        ▼
+Joy-it COM-ZY12PDN
+    set to 12 V
+        │
+        │      wires to 
+        │     barrel jack
+        ├─────────────────────▶ Brother PT-P700
+        │                       Draws up to 12 V / 2 A
+        │                               ▲
+        │                               │ USB A to USB mini
+        └───▶ 12→5V buck ────▶ ESP32 ───┘
+                          with USB A port
 ```
 
 The OTG port is the S3's internal USB PHY on fixed pins. Without the DevKit's USB socket, wire a USB-A female socket directly:
