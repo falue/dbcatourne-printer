@@ -21,7 +21,6 @@ PlatformIO + Arduino-ESP32 3.x (ESP-IDF 5.4), board ESP32-S3-DevKitC-1.
 Settings live in `data/config.json` (git-ignored), which is flashed into the LittleFS partition separately from the firmware. You can change Wi-Fi or the token without rebuilding:
 
 ```sh
-cp config.example.json data/config.json   # then edit
 pio run -t uploadfs                        # flash config
 pio run -t upload                          # flash firmware
 pio device monitor
