@@ -78,20 +78,11 @@ Joy-it COM-ZY12PDN
                           with USB A port
 ```
 
-The OTG port is the S3's internal USB PHY on fixed pins. Without the DevKit's USB socket, wire a USB-A female socket directly:
-
-| USB-A pin (wire color) | ESP32-S3 |
-|---|---|
-| 1 VBUS (red) | 5 V |
-| 2 D− (white) | GPIO19 |
-| 3 D+ (green) | GPIO20 |
-| 4 GND (black) | GND |
-
 ## Hardware notes
 
-- **Board requirement:** GPIO19/20 must be free for the printer. Use a board whose native USB goes straight to its own port, e.g. the Espressif **ESP32-S3-DevKitC-1** (two USB-C: "USB" = GPIO19/20, "UART" = serial chip). Boards with a single USB-C and an onboard USB hub (e.g. Waveshare ESP32-S3-DEV-KIT with CH334F + CH343) wire GPIO19/20 to that hub: USB host then fails, with the printer endlessly reconnecting while the USB-C is plugged in and never detected without it.
-- On-board RGB LED: GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1 (the firmware uses `RGB_BUILTIN` = 48).
-
-- Plug the printer into the DevKit's **USB** (OTG) port. Serial logs are on the **UART** port.
-- The USB port must supply 5 V on VBUS to the printer.
-- PT-P700: set the P-Lite/EL switch **off**. In P-Lite mode the printer appears as a different USB device (`UNSUPPORTED_DEVICE`). Also disable auto power-off, otherwise the printer eventually disappears (`NOT_CONNECTED`).
+- **Board:** Espressif **ESP32-S3-DevKitC-1-N8R8**. Its native USB (GPIO19/20) goes straight to its own port, separate from the serial chip.
+- **Board to avoid:** single USB-C boards with an onboard USB hub (e.g. Waveshare ESP32-S3-DEV-KIT with CH334F + CH343). The hub is hard-wired to GPIO19/20, so USB host fails: the printer endlessly reconnects while the USB-C is plugged in and is never detected without it.
+- **Ports:** plug the printer into the micro-USB port labelled **"USB"** (OTG). Serial logs are on the **"UART"** port.
+- **5 V for the printer:** the "USB" port gets no VBUS when the board is powered via its 5V pin. Bridge the Schottky diode labelled **"SL"** next to that port with a tiny wire. Afterwards don't plug a computer into the "USB" port while the board is powered from the buck, as the 5 V would feed back into it.
+- **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1 (the firmware uses `RGB_BUILTIN` = 48).
+- **PT-P700:** set the P-Lite/EL switch **off**. In P-Lite mode the printer appears as a different USB device (`UNSUPPORTED_DEVICE`). Also disable auto power-off, otherwise the printer eventually disappears (`NOT_CONNECTED`).
