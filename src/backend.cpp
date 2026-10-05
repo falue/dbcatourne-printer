@@ -38,6 +38,8 @@ int Backend::heartbeat(const Printer::Status &st) {
   doc["printerConnected"] = st.connected;
   doc["printerReady"] = st.ready;
   doc["tapeWidthMm"] = st.tapeWidthMm;
+  if (st.tapeColor >= 0) doc["tapeColor"] = st.tapeColor; else doc["tapeColor"] = nullptr;
+  if (st.textColor >= 0) doc["textColor"] = st.textColor; else doc["textColor"] = nullptr;
   doc["printerError"] = st.error;
   doc["firmware"] = FIRMWARE;
   String json;

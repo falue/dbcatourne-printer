@@ -22,7 +22,7 @@ public:
   int report(const String &jobId, const char *status, const char *error = nullptr);
 
 private:
-  static constexpr const char *FIRMWARE = "0.1.0";
+  static constexpr const char *FIRMWARE = "0.2.0";
   static constexpr int POLL_WAIT_S = 10;  // server may hold /jobs/next this long
   static constexpr size_t MAX_JOB_BYTES = 128 * 1024;
 

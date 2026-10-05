@@ -222,7 +222,8 @@ Printer::Status Printer::status() {
     uint32_t tape = s[S_MEDIA_WIDTH] | s[S_MEDIA_TYPE] << 8 | s[S_TAPE_COLOR] << 16 | s[S_TEXT_COLOR] << 24;
     if (tape != lastTape) logTape(s);
     lastTape = tape;
-    Status st = {.connected = true, .tapeWidthMm = s[S_MEDIA_WIDTH], .error = errorCode(s)};
+    Status st = {.connected = true, .tapeWidthMm = s[S_MEDIA_WIDTH], .tapeColor = s[S_TAPE_COLOR],
+                 .textColor = s[S_TEXT_COLOR], .error = errorCode(s)};
     if (!st.error && s[S_PHASE] != 0) st.error = "PRINTER_BUSY";
     st.ready = !st.error;
     return st;

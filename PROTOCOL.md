@@ -13,8 +13,10 @@ What the backend must implement for this firmware. All requests go to `<server>/
   "printerConnected": true,
   "printerReady": true,
   "tapeWidthMm": 24,
+  "tapeColor": 1,
+  "textColor": 8,
   "printerError": null,
-  "firmware": "0.1.0"
+  "firmware": "0.2.0"
 }
 ```
 
@@ -30,7 +32,9 @@ Reply `200`. The backend records the time and the **source public IP** of the re
 | `PRINTER_BUSY` | the printer reports that it is printing |
 | `NO_MEDIA`, `REPLACE_MEDIA`, `COVER_OPEN`, `CUTTER_JAM`, `OVERHEATING`, `WEAK_BATTERY`, `WRONG_ADAPTER`, `PRINTER_ERROR` | printer error flags |
 
-The ESP does not know which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`.
+`tapeColor` and `textColor` are the printer's colour codes from status bytes 24 and 25 (Brother raster command reference, e.g. tape `0x01` white, `0x06` yellow; text `0x08` black), `null` when the printer gave no status.
+
+The ESP does not know which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`; it warns about a tape colour that does not suit the label (prop labels white, shelf labels yellow).
 
 ## Next job
 

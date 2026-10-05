@@ -11,6 +11,8 @@ public:
     bool connected = false;
     bool ready = false;
     uint8_t tapeWidthMm = 0;
+    int16_t tapeColor = -1;  // Brother colour codes (status bytes 24/25), -1 when unknown
+    int16_t textColor = -1;
     const char *error = nullptr;  // machine-readable code, nullptr when ready
   };
 
