@@ -13,7 +13,6 @@ void Backend::begin(const Config &cfg) {
   c.user_data = this;
   http = esp_http_client_init(&c);
   esp_http_client_set_header(http, "Authorization", ("Bearer " + cfg.token).c_str());
-  esp_http_client_set_header(http, "Content-Type", "application/json");
 }
 
 esp_err_t Backend::onEvent(esp_http_client_event_t *e) {
@@ -25,6 +24,7 @@ esp_err_t Backend::onEvent(esp_http_client_event_t *e) {
 int Backend::post(const String &path, const String &json) {
   esp_http_client_set_url(http, (base + path).c_str());
   esp_http_client_set_method(http, HTTP_METHOD_POST);
+  esp_http_client_set_header(http, "Content-Type", "application/json");  // set_post_field(nullptr) deletes it
   esp_http_client_set_post_field(http, json.c_str(), json.length());
   esp_err_t err = esp_http_client_perform(http);
   esp_http_client_set_post_field(http, nullptr, 0);  // the field points into json
