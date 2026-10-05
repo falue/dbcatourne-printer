@@ -53,7 +53,6 @@ Press Enter to queue a test label, or drop a `.bin` PT-P700 command stream into 
  AC-DC 230v to 12V
         │ barrell jack
         ▼
-
 Barrel jack in case
         │
         ▼
