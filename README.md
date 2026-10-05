@@ -55,6 +55,10 @@ Press Enter to queue a test label, or drop a `.bin` PT-P700 command stream into 
         ▼
 
 Barrel jack in case
+        │
+        ▼
+    12→5V buck
+        │
         │ wires to usb c
         ▼
     POWER BANK
