@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <Adafruit_GFX.h>
+#include <atomic>
 #include <optional>
 #include <vector>
 #include "backend.h"
@@ -13,6 +14,10 @@ static Printer printer;
 static Backend backend;
 static WiFiMulti wifi;
 static uint8_t wifiReason = 0;  // last disconnect reason, 0 = none yet
+
+// On-board RGB LED state, shown by ledTask() (see README).
+enum class Led : uint8_t { NoWifi, Idle, Busy, Done, Error };
+static std::atomic<Led> led = Led::NoWifi;
 
 // Final job result not yet accepted by the backend. No new job is fetched until it is delivered.
 struct Result {
@@ -147,24 +152,27 @@ static void testPrint(const char *configError) {
   Serial.printf("Test print: %s\n", error ? error : "printed");
 }
 
-// On-board RGB LED: blue while Wi-Fi is connected, else orange SOS. Own task, as loop() blocks for seconds.
+// Own task, as loop() blocks for seconds.
 static void ledTask(void *) {
-  constexpr uint32_t UNIT_MS = 150;
+  constexpr uint8_t MAX = 64;
+  constexpr uint32_t BREATH_MS = 4000, BLINK_MS = 150, DONE_MS = 1000, STEP_MS = 20;
   for (;;) {
-    if (WiFi.status() == WL_CONNECTED) {
-      rgbLedWrite(RGB_BUILTIN, 0, 0, 64);
-      delay(UNIT_MS);
-      continue;
-    }
-    for (const char *p = "... --- ..."; *p; p++) {
-      if (*p != ' ') {
-        rgbLedWrite(RGB_BUILTIN, 64, 16, 0);
-        delay((*p == '.' ? 1 : 3) * UNIT_MS);
-        rgbLedWrite(RGB_BUILTIN, 0, 0, 0);
+    switch (Led s = led) {
+      case Led::NoWifi: rgbLedWrite(RGB_BUILTIN, millis() / BLINK_MS % 2 ? MAX : 0, 0, 0); break;
+      case Led::Idle: {
+        uint8_t v = MAX * (1 - cosf(TWO_PI * (millis() % BREATH_MS) / BREATH_MS)) / 2;
+        rgbLedWrite(RGB_BUILTIN, v, v, v);
+        break;
       }
-      delay((*p == ' ' ? 2 : 1) * UNIT_MS);  // gap 1 within a letter, 3 between letters
+      case Led::Busy: rgbLedWrite(RGB_BUILTIN, MAX, MAX / 4, 0); break;
+      case Led::Done:
+        rgbLedWrite(RGB_BUILTIN, 0, MAX, 0);
+        delay(DONE_MS);
+        led.compare_exchange_strong(s, Led::Idle);  // unless the state changed meanwhile
+        break;
+      case Led::Error: rgbLedWrite(RGB_BUILTIN, MAX, 0, 0); break;
     }
-    delay(6 * UNIT_MS);  // gap 7 between words
+    delay(STEP_MS);
   }
 }
 
@@ -180,6 +188,7 @@ void setup() {
   if (!configError) wifi.run();  // first connection attempt, so the test print can show it
   testPrint(configError);
   if (configError) {
+    led = Led::Error;
     Serial.printf("Config: %s. Upload /config.json with `pio run -t uploadfs`\n", configError);
     for (;;) delay(1000);
   }
@@ -194,6 +203,7 @@ void loop() {
   printer.poll();
   if (online != (wifi.run() == WL_CONNECTED)) {  // (re)connects to the strongest known network
     online = !online;
+    led = online ? Led::Idle : Led::NoWifi;
     Serial.println(online ? "WiFi: " + WiFi.localIP().toString() : String("WiFi: disconnected"));
   }
   if (!online) {
@@ -203,8 +213,10 @@ void loop() {
 
   if (millis() - lastHeartbeat >= HEARTBEAT_MS) {
     lastHeartbeat = millis();
-    int code = backend.heartbeat(printer.status());
+    Printer::Status st = printer.status();
+    int code = backend.heartbeat(st);
     if (code != 200) Serial.printf("Heartbeat: HTTP %d\n", code);
+    led = st.ready && code == 200 ? Led::Idle : Led::Error;
   }
 
   if (pending) {
@@ -218,9 +230,13 @@ void loop() {
 
   Job job;
   int code = backend.nextJob(job);
-  if (code == 200) handle(job);
-  else if (code != 204) {
+  if (code == 200) {
+    led = Led::Busy;
+    handle(job);
+    led = pending && !pending->error ? Led::Done : Led::Error;  // no pending: claim failed
+  } else if (code != 204) {
     Serial.printf("Next job: HTTP %d\n", code);
+    led = Led::Error;
     delay(RETRY_MS);
   }
 }

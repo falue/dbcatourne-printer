@@ -47,6 +47,18 @@ python3 tools/mock_backend.py   # prints the URL to put into "server" in data/co
 
 Press Enter to queue a test label, or drop a `.bin` PT-P700 command stream into `tools/jobs/`. Finished jobs move to `tools/jobs/done/` with the result in the file name. No auth, no TLS: for testing only.
 
+## Status LED
+
+The on-board RGB LED shows the current state:
+
+| LED | Meaning |
+|---|---|
+| White, slowly pulsing | Ready, waiting for a print job |
+| Red, blinking fast | No Wi-Fi connection (also while booting) |
+| Orange, static | Print job received, printing |
+| Green for 1 s | Job printed |
+| Red, static | Error: printer not ready (off, no tape, cover open, …), backend unreachable, job failed or invalid config. Cleared by the next heartbeat (every 15 s) that reports the printer ready |
+
 ## Wiring
 
 ```text
@@ -81,6 +93,15 @@ Joy-it COM-ZY12PDN
 
 - **Board:** Espressif **ESP32-S3-DevKitC-1-N8R8**. Its native USB (GPIO19/20) goes straight to its own port, separate from the serial chip.
 - **Board to avoid:** single USB-C boards with an onboard USB hub (e.g. Waveshare ESP32-S3-DEV-KIT with CH334F + CH343). The hub is hard-wired to GPIO19/20, so USB host fails: the printer endlessly reconnects while the USB-C is plugged in and is never detected without it.
+- **Native USB pins:** the S3's USB OTG PHY sits on fixed pins: **GPIO19 = D−**, **GPIO20 = D+**. To use a USB-A socket instead of the DevKit's "USB" port, wire it directly:
+
+  | USB-A pin (wire color) | ESP32-S3 |
+  |---|---|
+  | 1 VBUS (red) | 5 V |
+  | 2 D− (white) | GPIO19 |
+  | 3 D+ (green) | GPIO20 |
+  | 4 GND (black) | GND |
+
 - **Ports:** plug the printer into the micro-USB port labelled **"USB"** (OTG). Serial logs are on the **"UART"** port.
 - **5 V for the printer:** the "USB" port gets no VBUS when the board is powered via its 5V pin. Bridge the Schottky diode labelled **"SL"** next to that port with a tiny wire. Afterwards don't plug a computer into the "USB" port while the board is powered from the buck, as the 5 V would feed back into it.
 - **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1 (the firmware uses `RGB_BUILTIN` = 48).
