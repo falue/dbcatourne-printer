@@ -186,7 +186,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   for (const auto &w : config.wifi) wifi.addAP(w.ssid.c_str(), w.password.c_str());
   if (!configError) wifi.run();  // first connection attempt, so the test print can show it
-  testPrint(configError);
+  // testPrint(configError);
   if (configError) {
     led = Led::Error;
     Serial.printf("Config: %s. Upload /config.json with `pio run -t uploadfs`\n", configError);
