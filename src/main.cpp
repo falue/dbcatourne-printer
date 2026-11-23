@@ -16,8 +16,11 @@ static WiFiMulti wifi;
 static uint8_t wifiReason = 0;  // last disconnect reason, 0 = none yet
 
 // On-board RGB LED state, shown by ledTask() (see README).
-enum class Led : uint8_t { NoWifi, Idle, Busy, Done, Error };
-static std::atomic<Led> led = Led::NoWifi;
+enum class Led : uint8_t { Unreachable, Idle, Busy, Done, Printer, Error };
+static std::atomic<Led> led = Led::Unreachable;
+
+// LED for a failed backend request: -1 = no connection, else an HTTP error.
+static Led httpLed(int code) { return code < 0 ? Led::Unreachable : Led::Error; }
 
 // Final job result not yet accepted by the backend. No new job is fetched until it is delivered.
 struct Result {
@@ -30,20 +33,25 @@ static void handle(const Job &job) {
   Serial.printf("Job %s: %u bytes\n", job.id.c_str(), job.len);
   if (!job.data) {
     pending = Result{job.id, "JOB_TOO_LARGE"};
+    led = Led::Error;
     return;
   }
   Printer::Status st = printer.status();
   if (!st.ready) {
     pending = Result{job.id, st.error};
+    led = Led::Printer;
     return;
   }
   // Claim first: the backend refuses (e.g. 409) jobs that were cancelled or already handed out.
   int code = backend.report(job.id, "printing");
   if (code != 200) {
     Serial.printf("Job %s not claimed (HTTP %d)\n", job.id.c_str(), code);
+    led = httpLed(code);
     return;
   }
-  pending = Result{job.id, printer.print(job.data.get(), job.len)};
+  const char *error = printer.print(job.data.get(), job.len);
+  pending = Result{job.id, error};
+  led = error ? Led::Printer : Led::Done;
 }
 
 // Wi-Fi diagnostics for the test label: why there is no connection, known networks and a fresh scan.
@@ -155,22 +163,29 @@ static void testPrint(const char *configError) {
 // Own task, as loop() blocks for seconds.
 static void ledTask(void *) {
   constexpr uint8_t MAX = 64;
-  constexpr uint32_t BREATH_MS = 4000, BLINK_MS = 150, DONE_MS = 1000, STEP_MS = 20;
+  constexpr uint32_t BREATH_MS = 4000, BLINK_MS = 150, STEP_MS = 20;
+  // The LED sits on GPIO48 (DevKitC-1 v1.0) or GPIO38 (v1.1): drive both.
+  auto rgb = [](uint8_t r, uint8_t g, uint8_t b) { for (uint8_t pin : {48, 38}) rgbLedWrite(pin, r, g, b); };
   for (;;) {
     switch (Led s = led) {
-      case Led::NoWifi: rgbLedWrite(RGB_BUILTIN, millis() / BLINK_MS % 2 ? MAX : 0, 0, 0); break;
+      case Led::Unreachable: rgb(millis() / BLINK_MS % 2 ? MAX : 0, 0, 0); break;
       case Led::Idle: {
-        uint8_t v = MAX * (1 - cosf(TWO_PI * (millis() % BREATH_MS) / BREATH_MS)) / 2;
-        rgbLedWrite(RGB_BUILTIN, v, v, v);
+        float f = (1 - cosf(TWO_PI * (millis() % BREATH_MS) / BREATH_MS)) / 2;
+        rgb(0, 0, MAX * f * f);  // squared: looks more even to the eye
         break;
       }
-      case Led::Busy: rgbLedWrite(RGB_BUILTIN, MAX, MAX / 4, 0); break;
+      case Led::Busy: rgb(0, MAX, 0); break;
       case Led::Done:
-        rgbLedWrite(RGB_BUILTIN, 0, MAX, 0);
-        delay(DONE_MS);
+        for (int i = 0; i < 3; i++) {
+          rgb(0, 0, 0);
+          delay(BLINK_MS);
+          rgb(0, MAX, 0);
+          delay(BLINK_MS);
+        }
         led.compare_exchange_strong(s, Led::Idle);  // unless the state changed meanwhile
         break;
-      case Led::Error: rgbLedWrite(RGB_BUILTIN, MAX, 0, 0); break;
+      case Led::Printer: rgb(MAX, MAX / 2, 0); break;
+      case Led::Error: rgb(MAX, 0, 0); break;
     }
     delay(STEP_MS);
   }
@@ -203,7 +218,7 @@ void loop() {
   printer.poll();
   if (online != (wifi.run() == WL_CONNECTED)) {  // (re)connects to the strongest known network
     online = !online;
-    led = online ? Led::Idle : Led::NoWifi;
+    led = online ? Led::Idle : Led::Unreachable;
     Serial.println(online ? "WiFi: " + WiFi.localIP().toString() : String("WiFi: disconnected"));
   }
   if (!online) {
@@ -216,7 +231,7 @@ void loop() {
     Printer::Status st = printer.status();
     int code = backend.heartbeat(st);
     if (code != 200) Serial.printf("Heartbeat: HTTP %d\n", code);
-    led = st.ready && code == 200 ? Led::Idle : Led::Error;
+    led = code != 200 ? httpLed(code) : st.ready ? Led::Idle : Led::Printer;
   }
 
   if (pending) {
@@ -233,10 +248,9 @@ void loop() {
   if (code == 200) {
     led = Led::Busy;
     handle(job);
-    led = pending && !pending->error ? Led::Done : Led::Error;  // no pending: claim failed
   } else if (code != 204) {
     Serial.printf("Next job: HTTP %d\n", code);
-    led = Led::Error;
+    led = httpLed(code);
     delay(RETRY_MS);
   }
 }

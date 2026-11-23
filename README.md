@@ -1,6 +1,8 @@
 # ESP32-printer label printer - ESP32 side
 Enables a printer to be wireless and work on wifi.
 
+> **NOTE**: ⚠ VIBE CODED ⚠
+
 For receiving print jobs from catourne.ch user space and sending it to a **Brother PT-P700**.
 
 Also sends a heartbeat and confirms a probe.
@@ -53,11 +55,14 @@ The on-board RGB LED shows the current state:
 
 | LED | Meaning |
 |---|---|
-| White, slowly pulsing | Ready, waiting for a print job |
-| Red, blinking fast | No Wi-Fi connection (also while booting) |
-| Orange, static | Print job received, printing |
-| Green for 1 s | Job printed |
-| Red, static | Error: printer not ready (off, no tape, cover open, …), backend unreachable, job failed or invalid config. Cleared by the next heartbeat (every 15 s) that reports the printer ready |
+| Blue, slowly fading in and out | Ready, waiting for a print job |
+| Red, blinking fast | No Wi-Fi or backend unreachable (also while booting) |
+| Green, static | Print job received, printing |
+| Green, 3 quick blinks | Job printed |
+| Yellow, static | Printer problem anyone can fix: off/unplugged, no or wrong tape, cover open, … |
+| Red, static | Backend rejected a request (e.g. bad token), job too large or invalid config |
+
+The heartbeat (every 15 s) resets the LED to the current state.
 
 ## Wiring
 
@@ -104,5 +109,5 @@ Joy-it COM-ZY12PDN
 
 - **Ports:** plug the printer into the micro-USB port labelled **"USB"** (OTG). Serial logs are on the **"UART"** port.
 - **5 V for the printer:** the "USB" port gets no VBUS when the board is powered via its 5V pin. Bridge the Schottky diode labelled **"SL"** next to that port with a tiny wire. Afterwards don't plug a computer into the "USB" port while the board is powered from the buck, as the 5 V would feed back into it.
-- **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1 (the firmware uses `RGB_BUILTIN` = 48).
+- **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1. The firmware drives both, so it works on either.
 - **PT-P700:** set the P-Lite/EL switch **off**. In P-Lite mode the printer appears as a different USB device (`UNSUPPORTED_DEVICE`). Also disable auto power-off, otherwise the printer eventually disappears (`NOT_CONNECTED`).
