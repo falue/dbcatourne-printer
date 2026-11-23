@@ -209,6 +209,7 @@ bool Printer::readStatus(uint8_t *s, uint32_t timeoutMs) {
 }
 
 Printer::Status Printer::status() {
+  std::lock_guard lock(mutex);
   poll();
   if (!dev) return {.error = "NOT_CONNECTED"};
   if (iface < 0) return {.connected = true, .error = "UNSUPPORTED_DEVICE"};
@@ -232,6 +233,7 @@ Printer::Status Printer::status() {
 }
 
 const char *Printer::print(const uint8_t *data, size_t len) {
+  std::lock_guard lock(mutex);
   if (iface < 0) return "NOT_CONNECTED";
   if (!write(data, len)) return "USB_WRITE_FAILED";
   uint8_t s[32];

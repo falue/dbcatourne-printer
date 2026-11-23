@@ -4,7 +4,7 @@ What the backend must implement for this firmware. All requests go to `<server>/
 
 ## Heartbeat
 
-`POST /heartbeat` roughly every 15–25 s:
+`POST /heartbeat` roughly every 15–25 s, and as soon as the printer status changes (after a running job long-poll, so within ~10 s):
 
 ```json
 {
@@ -34,7 +34,7 @@ Reply `200`. The backend records the time and the **source public IP** of the re
 
 `tapeColor` and `textColor` are the printer's colour codes from status bytes 24 and 25 (Brother raster command reference, e.g. tape `0x01` white, `0x06` yellow; text `0x08` black), `null` when the printer gave no status.
 
-The heartbeat does not say which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`, and warns about a tape colour that does not suit the label (prop labels white, shelf labels yellow). As the heartbeat can be up to 15 s old, the ESP also checks the colour right before printing when the job sends `X-Tape-Colors` (see below).
+The heartbeat does not say which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`, and warns about a tape colour that does not suit the label (prop labels white, shelf labels yellow). As the heartbeat can lag up to ~10 s behind the printer, the ESP also checks the colour right before printing when the job sends `X-Tape-Colors` (see below).
 
 ## Next job
 

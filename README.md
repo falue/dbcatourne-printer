@@ -16,7 +16,7 @@ PlatformIO + Arduino-ESP32 3.x (ESP-IDF 5.4), board ESP32-S3-DevKitC-1.
 - `src/printer.*` – PT-P700 over the S3's USB OTG port in host mode (ESP-IDF USB host library): hotplug, status request `ESC i S`, sending jobs, waiting for "printing completed".
 - `src/backend.*` – HTTPS client (TLS verified against the built-in root CA bundle): heartbeat, long-poll for jobs, claim/report.
 - `src/config.*` – loads `/config.json`.
-- `src/main.cpp` – main loop: heartbeat every 15 s, then fetch → check printer → claim → print → report.
+- `src/main.cpp` – main loop: heartbeat every 15 s and on printer changes, then fetch → check printer → claim → print → report. A separate task checks the printer over USB every second for the LED.
 
 ## Credentials / config
 
@@ -62,7 +62,7 @@ The on-board RGB LED shows the current state:
 | Yellow, static | Printer problem anyone can fix: off/unplugged, no or wrong tape, cover open, … |
 | Red, static | Backend rejected a request (e.g. bad token), job too large or invalid config |
 
-The heartbeat (every 15 s) resets the LED to the current state.
+Printer states (blue/yellow) follow the printer within about a second. Red is cleared by the next successful heartbeat (every 15 s).
 
 ## Wiring
 

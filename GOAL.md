@@ -209,11 +209,13 @@ It should:
 - connect to Wi-Fi
 - authenticate itself to the backend
 - detect the PT-P700 over USB
-- send regular heartbeats
+- send regular heartbeats, plus one right after a printer status change
 - poll/wait for print jobs
 - receive printer-ready binary data
 - send that data to the PT-P700
 - read printer status
+- refuse a job whose allowed tape colours (`X-Tape-Colors`) do not match the loaded tape
+- show its state on the on-board status LED
 - report printed / failed
 - retry network communication safely
 

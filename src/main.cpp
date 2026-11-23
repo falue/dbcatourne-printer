@@ -22,6 +22,9 @@ static std::atomic<Led> led = Led::Unreachable;
 // LED for a failed backend request: -1 = no connection, else an HTTP error.
 static Led httpLed(int code) { return code < 0 ? Led::Unreachable : Led::Error; }
 
+// Set by printerTask() when the printer status changed, so loop() sends a heartbeat right away.
+static std::atomic<bool> printerChanged = false;
+
 // Final job result not yet accepted by the backend. No new job is fetched until it is delivered.
 struct Result {
   String jobId;
@@ -199,10 +202,25 @@ static void ledTask(void *) {
   }
 }
 
+// Checks the printer over USB, independent of the backend: shows its state on the LED within a second.
+static void printerTask(void *) {
+  constexpr uint32_t CHECK_MS = 1000;
+  Printer::Status last;
+  for (;;) {
+    Printer::Status st = printer.status();  // waits while a job prints
+    if (st != last) printerChanged = true;
+    last = st;
+    Led want = st.ready ? Led::Idle : Led::Printer, cur = led;
+    if (cur == Led::Idle || cur == Led::Printer) led.compare_exchange_strong(cur, want);  // others are set by loop()
+    delay(CHECK_MS);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   xTaskCreate(ledTask, "led", 4096, nullptr, 1, nullptr);
   printer.begin();
+  xTaskCreate(printerTask, "printer", 4096, nullptr, 1, nullptr);
   const char *configError = LittleFS.begin() ? config.load(LittleFS) : "LittleFS mount failed";
   WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) { wifiReason = info.wifi_sta_disconnected.reason; },
                ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -223,7 +241,6 @@ void loop() {
   static uint32_t lastHeartbeat = millis() - HEARTBEAT_MS;
   static bool online = false;
 
-  printer.poll();
   if (online != (wifi.run() == WL_CONNECTED)) {  // (re)connects to the strongest known network
     online = !online;
     led = online ? Led::Idle : Led::Unreachable;
@@ -234,7 +251,7 @@ void loop() {
     return;
   }
 
-  if (millis() - lastHeartbeat >= HEARTBEAT_MS) {
+  if (printerChanged.exchange(false) || millis() - lastHeartbeat >= HEARTBEAT_MS) {
     lastHeartbeat = millis();
     Printer::Status st = printer.status();
     int code = backend.heartbeat(st);
