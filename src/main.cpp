@@ -162,7 +162,7 @@ static void testPrint(const char *configError) {
 
 // Own task, as loop() blocks for seconds.
 static void ledTask(void *) {
-  constexpr uint8_t MAX = 64;
+  constexpr uint8_t MAX = 32;
   constexpr uint32_t BREATH_MS = 4000, BLINK_MS = 150, STEP_MS = 20;
   // The LED sits on GPIO48 (DevKitC-1 v1.0) or GPIO38 (v1.1): drive both.
   auto rgb = [](uint8_t r, uint8_t g, uint8_t b) { for (uint8_t pin : {48, 38}) rgbLedWrite(pin, r, g, b); };
