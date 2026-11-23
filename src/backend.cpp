@@ -16,8 +16,10 @@ void Backend::begin(const Config &cfg) {
 }
 
 esp_err_t Backend::onEvent(esp_http_client_event_t *e) {
-  if (e->event_id == HTTP_EVENT_ON_HEADER && !strcasecmp(e->header_key, "X-Job-Id"))
-    static_cast<Backend *>(e->user_data)->jobId = e->header_value;
+  if (e->event_id != HTTP_EVENT_ON_HEADER) return ESP_OK;
+  auto *self = static_cast<Backend *>(e->user_data);
+  if (!strcasecmp(e->header_key, "X-Job-Id")) self->jobId = e->header_value;
+  else if (!strcasecmp(e->header_key, "X-Tape-Colors")) self->tapeColors = e->header_value;
   return ESP_OK;
 }
 
@@ -57,7 +59,7 @@ int Backend::report(const String &id, const char *status, const char *error) {
 }
 
 int Backend::nextJob(Job &job) {
-  jobId = "";
+  jobId = tapeColors = "";
   esp_http_client_set_url(http, (base + "/jobs/next?wait=" + POLL_WAIT_S).c_str());
   esp_http_client_set_method(http, HTTP_METHOD_GET);
   int status = -1;
@@ -67,6 +69,13 @@ int Backend::nextJob(Job &job) {
     if (status == 200) {
       job.id = jobId;
       job.len = len > 0 ? len : 0;
+      for (const char *p = tapeColors.c_str(); *p;) {  // comma-separated decimal codes
+        char *end;
+        long c = strtol(p, &end, 10);
+        if (end == p) break;
+        job.tapeColors.push_back(c);
+        p = *end ? end + 1 : end;
+      }
       if (jobId.isEmpty() || len <= 0) status = -1;  // needs X-Job-Id and Content-Length
       else if (len <= MAX_JOB_BYTES) job.data.reset(new (std::nothrow) uint8_t[len]);
       for (size_t got = 0; status == 200 && job.data && got < job.len;) {

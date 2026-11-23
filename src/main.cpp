@@ -42,6 +42,14 @@ static void handle(const Job &job) {
     led = Led::Printer;
     return;
   }
+  const auto &ok = job.tapeColors;
+  if (!ok.empty() && std::find(ok.begin(), ok.end(), st.tapeColor) == ok.end()) {
+    Serial.printf("Job %s: tape colour %d not allowed\n", job.id.c_str(), st.tapeColor);
+    backend.heartbeat(st);  // the app sees the new tape before the failed report
+    pending = Result{job.id, "WRONG_TAPE_COLOR"};
+    led = Led::Printer;
+    return;
+  }
   // Claim first: the backend refuses (e.g. 409) jobs that were cancelled or already handed out.
   int code = backend.report(job.id, "printing");
   if (code != 200) {

@@ -16,7 +16,7 @@ What the backend must implement for this firmware. All requests go to `<server>/
   "tapeColor": 1,
   "textColor": 8,
   "printerError": null,
-  "firmware": "0.2.0"
+  "firmware": "0.3.0"
 }
 ```
 
@@ -34,7 +34,7 @@ Reply `200`. The backend records the time and the **source public IP** of the re
 
 `tapeColor` and `textColor` are the printer's colour codes from status bytes 24 and 25 (Brother raster command reference, e.g. tape `0x01` white, `0x06` yellow; text `0x08` black), `null` when the printer gave no status.
 
-The ESP does not know which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`; it warns about a tape colour that does not suit the label (prop labels white, shelf labels yellow).
+The heartbeat does not say which tape is expected. The backend compares `tapeWidthMm` with its printer configuration and derives `WRONG_TAPE`, and warns about a tape colour that does not suit the label (prop labels white, shelf labels yellow). As the heartbeat can be up to 15 s old, the ESP also checks the colour right before printing when the job sends `X-Tape-Colors` (see below).
 
 ## Next job
 
@@ -44,6 +44,7 @@ The ESP does not know which tape is expected. The backend compares `tapeWidthMm`
 - `200`: one job, sent as follows.
   - Header `X-Job-Id: <unique id>`.
   - Header `Content-Length` (required, max 128 KiB).
+  - Header `X-Tape-Colors: 6,65,96,145` (optional, firmware ≥ 0.3.0): the `tapeColor` codes this label may be printed on, comma-separated decimals. Right before printing, the ESP reads a fresh printer status; if the tape colour is not in the list, it does not print, sends a heartbeat with the new tape and reports `failed` with `WRONG_TAPE_COLOR`. Leave the header out to print on any tape, e.g. after the user confirmed "print anyway".
   - Body `application/octet-stream`: the complete PT-P700 command stream for **one label** (invalidate, initialize, raster mode, raster lines, then print with feed `0x1A`). The ESP sends it to the printer byte for byte.
 
   Only offer jobs in state `queued`, oldest first. Handing out a job must not change its state. The ESP claims it explicitly.
@@ -63,6 +64,7 @@ Reply `200` if accepted. Reply `409` if the transition is not allowed (for examp
 A job reaches `failed` for one of these reasons:
 
 - The printer is not ready when the job arrives: `failed` straight from `queued`, with a `printerError` code.
+- `WRONG_TAPE_COLOR`: the loaded tape colour is not in the job's `X-Tape-Colors`. `failed` straight from `queued`, nothing was printed.
 - `JOB_TOO_LARGE`: the job is over 128 KiB or the ESP ran out of memory.
 - `USB_WRITE_FAILED`, `PRINTER_OFF`, or a printer error flag during the print.
 - `UNCONFIRMED`: all bytes were sent, but no completion status arrived within 60 s. A label may or may not exist. Do not retry automatically.
