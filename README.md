@@ -111,3 +111,6 @@ Joy-it COM-ZY12PDN
 - **5 V for the printer:** the "USB" port gets no VBUS when the board is powered via its 5V pin. Bridge the Schottky diode labelled **"SL"** next to that port with a tiny wire. Afterwards don't plug a computer into the "USB" port while the board is powered from the buck, as the 5 V would feed back into it.
 - **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1. The firmware drives both, so it works on either.
 - **PT-P700:** set the P-Lite/EL switch **off**. In P-Lite mode the printer appears as a different USB device (`UNSUPPORTED_DEVICE`). Also disable auto power-off, otherwise the printer eventually disappears (`NOT_CONNECTED`).
+
+## License
+This is published under the [GNU GPLv3](COPYING) license.
