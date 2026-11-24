@@ -5,9 +5,27 @@ Enables a printer to be wireless and work on wifi.
 
 For receiving print jobs from catourne.ch user space and sending it to a **Brother PT-P700**.
 
-Also sends a heartbeat and confirms a probe.
+See [PROTOCOL.md](PROTOCOL.md) for the API the backend must provide.
 
-See [GOAL.md](GOAL.md) for the architecture and [PROTOCOL.md](PROTOCOL.md) for the API the backend must provide.
+## Supported printers
+
+Tested only with the **Brother PT-P700** (USB `04f9:2061`). The firmware accepts only that USB ID; anything else shows up as `UNSUPPORTED_DEVICE`.
+
+Untested, but other P-touch models with the same raster command set and 32-byte status should work after changing `PID` in [src/printer.h](src/printer.h): PT-P750W (`2062`), PT-E550W (`2060`), PT-H500 (`205e`), PT-E500 (`205f`), PT-D600 (`2074`), PT-P710BT (`20af`). Wireless models may need their P-Lite/EL switch off, like the PT-P700. Larger models (e.g. PT-P900 series, 36 mm) use different commands and won't work as-is.
+
+## How it works
+
+```text
+Ça Tourne editor ──▶ backend (catourne.ch) ◀── HTTPS ── ESP32-S3 ── USB ──▶ PT-P700
+```
+
+The ESP is deliberately dumb. The backend does everything else: permissions, label rendering, rasterizing and encoding to the PT-P700 byte stream, the queue. The ESP only fetches a finished command stream and sends it to the printer byte for byte, so a new label design never needs a reflash.
+
+- **No inbound connections.** The ESP only makes outgoing HTTPS requests (heartbeat, long-poll for jobs), so it works behind any NAT or guest Wi-Fi with no port forwarding.
+- **Probe without printing.** Every print button asks the backend "can I print right now?" first. The backend answers from the latest heartbeat alone (`ESP_OFFLINE` after 60 s of silence, `PRINTER_OFFLINE`, `PRINTER_BUSY`, `PRINTER_ERROR`, `WRONG_TAPE` width, a `WRONG_TAPE_COLOR` warning), so nothing reaches the printer.
+- **Same-network check.** The backend stores the public IP each heartbeat comes from and compares it with the browser's. The browser can't claim to be local. A different IP is not a hard refusal: the editor asks "print anyway?" (once a day), because a phone off the warehouse Wi-Fi is usually a mistake but not always. Per printer it can be switched off (`requireLocal: false`).
+- **Tape colour check at print time.** Heartbeats can lag a few seconds behind a tape swap, so the job lists the allowed tape colours (`X-Tape-Colors`) and the ESP reads a fresh printer status right before printing. Wrong tape: nothing is printed and the job fails with `WRONG_TAPE_COLOR`.
+- **Never printed twice, never lost.** The ESP claims a job before printing and prints only after the backend accepts the claim. A job counts as `printed` only when the printer itself reports "printing completed", not when the bytes are sent. Anything uncertain ends as `failed` (`UNCONFIRMED`, `LOST`) and is never retried automatically; a person decides.
 
 ## Firmware
 
@@ -111,6 +129,9 @@ Joy-it COM-ZY12PDN
 - **5 V for the printer:** the "USB" port gets no VBUS when the board is powered via its 5V pin. Bridge the Schottky diode labelled **"SL"** next to that port with a tiny wire. Afterwards don't plug a computer into the "USB" port while the board is powered from the buck, as the 5 V would feed back into it.
 - **On-board RGB LED:** GPIO48 on DevKitC-1 v1.0, GPIO38 on v1.1. The firmware drives both, so it works on either.
 - **PT-P700:** set the P-Lite/EL switch **off**. In P-Lite mode the printer appears as a different USB device (`UNSUPPORTED_DEVICE`). Also disable auto power-off, otherwise the printer eventually disappears (`NOT_CONNECTED`).
+
+## Credits
+Inspired by [LabelSis](https://github.com/aalarchiv/labelsis) by aalarchiv (MIT), an ESP32 USB-host print server for the PT-P700 family.
 
 ## License
 This is published under the [GNU GPLv3](COPYING) license.
